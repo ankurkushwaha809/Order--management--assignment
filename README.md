@@ -1,181 +1,65 @@
-# 📦 NextGen Order Center — Full-Stack Order Management System
+# 📦 Order Management System with Automated Scheduler
 
-A production-ready Full Stack Order Management Application featuring automated status transitions, secure scheduler execution audits, database transaction designs, and a clean corporate light-theme React dashboard with customizable auto-refresh polling.
-
----
-
-## 🏗️ Folder Structure
-
-```text
-Order-management/
-├── backend/
-│   ├── src/
-│   │   ├── config/
-│   │   │   └── db.js            # MongoDB Connection configuration
-│   │   ├── controllers/
-│   │   │   ├── orderController.js      # Handles Order creation & fetching
-│   │   │   └── schedulerController.js  # Core scheduler logic & audit logs
-│   │   ├── middleware/
-│   │   │   └── auth.js          # Security middleware for scheduler verification
-│   │   ├── models/
-│   │   │   ├── Order.js         # Order Mongoose Schema
-│   │   │   └── SchedulerLog.js  # Scheduler Logs Mongoose Schema
-│   │   ├── routes/
-│   │   │   ├── orderRoutes.js   # Order endpoint mappings
-│   │   │   └── schedulerRoutes.js # Scheduler manual trigger & logs endpoints
-│   │   ├── scheduler/
-│   │   │   └── cron.js          # Background local node-cron scheduling
-│   │   └── server.js            # Entrypoint for Express backend server
-│   ├── .env                     # Secret key and DB connection strings (ignored by Git)
-│   ├── .env.example             # Example environment variables
-│   ├── seed.js                  # Script to seed database with mock records
-│   └── package.json             # Backend dependencies
-├── frontend/
-│   ├── src/
-│   │   ├── components/
-│   │   │   ├── LogsDashboard.jsx # Audit logs workspace
-│   │   │   ├── OrderModal.jsx   # Create order modal form
-│   │   │   ├── OrderTable.jsx   # List of orders and audit history timeline
-│   │   │   └── StatsCards.jsx   # Quick metrics summary counters
-│   │   ├── App.jsx              # Main React state container & refresh scheduler
-│   │   ├── index.css            # Tailwind CSS directives & corporate styles
-│   │   └── main.jsx             # React mounting script
-│   ├── index.html               # Main HTML shell
-│   ├── package.json             # Frontend dependencies
-│   ├── tailwind.config.js       # Tailwind CSS v3 configuration
-│   ├── postcss.config.js        # PostCSS configurations
-│   └── vite.config.js           # Vite server settings & API proxies
-├── .gitignore                   # Ignore node_modules, build outputs, and .env
-└── README.md                    # System architecture & documentation (this file)
-```
+A full-stack order management dashboard featuring automated order status transitions, execution logs, and a clean corporate light-theme React interface.
 
 ---
 
-## 🛠️ Setup & Running Locally
+## 🛠️ Setup & Run Instructions
 
 ### 1. Backend Setup
-1. Navigate to the `backend/` directory:
+1. Navigate to `backend/` and install dependencies:
    ```bash
-   cd backend
+   cd backend && npm install
    ```
-2. Create your `.env` file based on `.env.example`:
+2. Create a `.env` file:
    ```env
    PORT=5000
-   MONGODB_URI=mongodb+srv://<username>:<password>@cluster0.net/order_management?retryWrites=true&w=majority
+   MONGODB_URI=your_mongodb_connection_uri
    SCHEDULER_SECRET_KEY=my_secure_scheduler_secret_key_2026
    ```
-3. Install dependencies:
-   ```bash
-   npm install
-   ```
-4. Seed the database with realistic mock orders (dates are back-dated so they are ready for status transition testing):
+3. Seed the database with mock orders (back-dated for scheduler testing):
    ```bash
    node seed.js
    ```
-5. Start the Express backend:
+4. Start development server:
    ```bash
    npm run dev
    ```
-   *The backend will run on `http://localhost:5000`.*
 
 ### 2. Frontend Setup
-1. Open a new terminal and navigate to the `frontend/` directory:
+1. Navigate to `frontend/` and install dependencies:
    ```bash
-   cd frontend
+   cd ../frontend && npm install
    ```
-2. Install dependencies:
-   ```bash
-   npm install
-   ```
-3. Start the React development server:
+2. Start React application:
    ```bash
    npm run dev
    ```
-   *The React UI will run on `http://localhost:3000` (API calls automatically proxied to localhost:5000).*
+   *Dashboard runs on `http://localhost:3000` (auto-proxies requests to backend).*
 
 ---
 
 ## 📐 System Design & Architecture
 
-### 1. Database Choice
-We selected **MongoDB** because of the following reasons:
-* **Nested Document Capabilities**: Order status history (`statusHistory`) naturally lives inside the order document as a sub-document array. This allows us to retrieve an order along with its complete audit history in a single, fast read operation rather than performing expensive relational table Joins.
-* **Scalability**: MongoDB supports horizontal scaling through native sharding and replica sets, making it excellent for massive read/write e-commerce databases.
+### 1. Database & Collections
+* **Database**: **MongoDB** is used for nested document modeling, allowing order transition timelines to be saved as an array within the order document without relational joins.
+* **`orders` Collection**: Stores Order details, Payment status, and a sub-document array `statusHistory` tracking state changes (status, changedAt, reason).
+* **`schedulerlogs` Collection**: Records execution metrics of scheduler runs (inspected orders list, updated orders counts, runtime duration, status, errors).
 
-### 2. Database Collections Schema
+### 2. Duplicate Prevention & Race Conditions
+* **Duplicate Prevention**: Database-level unique index on `orderId` prevents double insertions. Custom unique ID generator (`ORD-YYYYMMDD-XXXX`) creates unique IDs.
+* **Race Condition Handling**: Utilizes Mongoose Optimistic Concurrency Control versioning (`__v`) to fail updates if another thread modified the document between check and save.
 
-#### `orders` Collection
-Represents orders placed in the system:
-* `orderId` (String, unique, indexed) - Custom generated readable format.
-* `customerName` (String, indexed) - Promotes fast searches on customer names.
-* `phone` (String) - Contact phone.
-* `productName` (String) - Item name.
-* `amount` (Number) - Total price in INR.
-* `paymentStatus` (Enum: `['PENDING', 'PAID']`) - Status of payment transaction.
-* `orderStatus` (Enum: `['PLACED', 'PROCESSING', 'READY_TO_SHIP', 'DELIVERED', 'CANCELLED']`) - Current status.
-* `statusHistory` (Array of sub-documents):
-  * `status` (String) - Status state.
-  * `changedAt` (Date) - Time of transition.
-  * `reason` (String) - Reason text.
-* `createdAt` / `updatedAt` (Dates, automatically generated by Mongoose).
-
-#### `schedulerlogs` Collection
-Records background scheduler task executions for auditing:
-* `executionId` (String, unique) - Represents a single scan.
-* `startTime` / `endTime` (Dates) - Check runtime timestamps.
-* `durationMs` (Number) - Time taken in milliseconds.
-* `status` (Enum: `['SUCCESS', 'FAILED']`) - Run result status.
-* `ordersProcessed` (Number) - Active orders inspected.
-* `ordersUpdated` (Number) - Orders auto-advanced.
-* `checkedOrders` (Array of Strings) - List of order IDs evaluated in this scan.
-* `details` (Array of sub-documents):
-  * `orderId` (String) - The modified order.
-  * `previousStatus` (String) - Old state.
-  * `newStatus` (String) - New state.
-* `errorMessage` (String, null if success) - Captures database exceptions.
+### 3. Scalability & Scheduler Design
+* **Scale Strategy**: Horizontally scalable API nodes behind a load balancer. 
+* **Scheduler Choice**: Powered by `node-cron` locally every 5 minutes. For multi-node production setups, a dedicated cloud scheduler (Google Cloud Scheduler / AWS EventBridge) triggers the secure, token-protected REST API `/api/scheduler/run` instead of local cron loops.
 
 ---
 
-## 🔒 Security, Race Conditions & Scale
+## 📡 API Endpoints
 
-### A. Preventing Duplicate Orders
-* **Database Unique Constraints**: `orderId` has a `unique: true` and `index: true` index constraint at the MongoDB database level. If two write operations try to save the same Order ID, the second will be immediately rejected with a duplicate key write error.
-* **Server-side Generation**: Backend generates a unique structure `ORD-YYYYMMDD-XXXX` (where XXXX is a random suffix) on order receipt, preventing conflicts.
-
-### B. Race Condition Management
-* **Atomic Query Operators**: The scheduler uses MongoDB's query filters to target only specific statuses (e.g. `{ orderStatus: 'PLACED' }`). Once checked, it updates it using `order.save()`.
-* **Optimistic Concurrency Control (OCC)**: Using Mongoose's version keys (`__v`), updates fail if another server instance modified the same order document in the millisecond between read and write.
-
-### C. Scalability Strategy
-1. **Load Balancing**: The backend APIs can be deployed to AWS ECS / Fargate containers behind an Application Load Balancer (ALB) to scale horizontally.
-2. **Dedicated Scheduler**: For production, instead of running local cron jobs inside Express container nodes (which will duplicate runs if we scale horizontally), we offload the scheduler to a dedicated Cloud Scheduler (such as **AWS EventBridge** or **Google Cloud Scheduler**). The Cloud Scheduler triggers the protected API endpoint `/api/scheduler/run` securely every 5 minutes.
-3. **Database Indexing**: Sharding MongoDB on the hashed `orderId` key ensures balanced write distributions.
-
----
-
-## 📡 API Reference Documentation
-
-### 📦 Order Management
 * **Create Order**: `POST /api/orders`
-  * Body:
-    ```json
-    {
-      "customerName": "Ankur Kushwaha",
-      "phone": "+919876543210",
-      "productName": "OnePlus Nord Buds",
-      "amount": 2499,
-      "paymentStatus": "PENDING"
-    }
-    ```
-* **List Orders (with filters)**: `GET /api/orders`
-  * Query parameters:
-    * `status`: Filter by status (`ALL`, `PLACED`, `PROCESSING`, `READY_TO_SHIP`, `DELIVERED`, `CANCELLED`).
-    * `search`: Matches customer names or Order IDs.
-    * `page` / `limit`: Pagination parameters.
-
-### ⚙️ Scheduler Audits
-* **Trigger Scheduler Manually**: `POST /api/scheduler/run`
-  * Requires custom security header:
-    `x-scheduler-key: my_secure_scheduler_secret_key_2026`
-* **Fetch Scheduler Logs**: `GET /api/scheduler/logs`
-  * Returns logs of the last 30 execution audits.
+* **Get Orders (Filtered/Paged/Search)**: `GET /api/orders`
+* **Trigger Scheduler Job (Secret Header Check)**: `POST /api/scheduler/run`
+  * Header: `x-scheduler-key: my_secure_scheduler_secret_key_2026`
+* **Get Scheduler Audit Logs**: `GET /api/scheduler/logs`
