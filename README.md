@@ -4,6 +4,14 @@ A corporate order management dashboard built to monitor, track, and automate the
 
 ---
 
+## 🌐 Live Production Deployment
+The application is deployed on AWS EC2 and is accessible via both the secure domain and direct IP address:
+* **Live Website (Secure HTTPS)**: **[https://order-mgt.duckdns.org](https://order-mgt.duckdns.org)**
+* **Direct IP Access (HTTP)**: **[http://13.60.59.186](http://13.60.59.186)**
+* **API Endpoint (Protected)**: `https://order-mgt.duckdns.org/api/orders`
+
+---
+
 ## 🌟 Core Features
 
 * **Order Board Workspace**: View, search, and filter orders dynamically. Expand any order row to see its complete status transition timeline and history.
@@ -47,6 +55,24 @@ A corporate order management dashboard built to monitor, track, and automate the
    npm run dev
    ```
    *Open `http://localhost:3000` in your browser.*
+
+---
+
+## 🚀 AWS EC2 Production Deployment Setup
+
+The application is hosted on an **AWS EC2 (Ubuntu 22.04 LTS)** instance using the following stack:
+
+1. **PM2 (Process Manager)**: Keeps the Node.js/Express API running persistently in the background:
+   ```bash
+   sudo npm install -g pm2
+   pm2 start src/server.js --name "order-backend"
+   ```
+2. **Nginx Web Server**: Serves React static files (`frontend/dist`) and proxies API requests `/api` internally to port 5000.
+3. **SSL Certificate (Let's Encrypt)**: Fully secure HTTPS protocol integration via Certbot automation:
+   ```bash
+   sudo apt install certbot python3-certbot-nginx -y
+   sudo certbot --nginx -d order-mgt.duckdns.org
+   ```
 
 ---
 
